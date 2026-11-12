@@ -1,0 +1,66 @@
+# Deploys the site to GitHub Pages.
+# One-time setup: repo Settings → Pages → Build and deployment → Source: "GitHub Actions".
+name: Deploy to GitHub Pages
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+# Least privilege: the default token can only read the repo. The deploy job opts in to what it needs.
+permissions:
+  contents: read
+
+concurrency:
+  group: pages
+  cancel-in-progress: false
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      # Third-party Actions are pinned to full commit SHAs (immutable), not mutable tags.
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          persist-credentials: false
+
+      - name: Security gate
+        run: |
+          # These patterns would be blocked by the Content-Security-Policy anyway; fail early instead.
+          if grep -nP '<script(?![^>]*\bsrc=)' index.html; then echo "::error::Inline <script> found in index.html"; exit 1; fi
+          if grep -nE ' on[a-z]+="' index.html; then echo "::error::Inline event handler found in index.html"; exit 1; fi
+          if grep -nE 'eval\(|new Function\(|document\.write\(' app.js theme-init.js sw.js; then echo "::error::Dangerous JS pattern found"; exit 1; fi
+          grep -q 'Content-Security-Policy' index.html || { echo "::error::CSP meta tag missing"; exit 1; }
+          # A copy-paste slip can leave two definitions of the same name (valid JS, silently wrong): catch it.
+          python3 - <<'PY'
+          import re, collections, sys
+          src = open("app.js").read()
+          dup = sorted(n for n, c in collections.Counter(re.findall(r'^  (?:function|var) ([A-Za-z0-9_]+)\b', src, re.M)).items() if c > 1)
+          if dup:
+              print("::error::Duplicate top-level definitions in app.js: " + ", ".join(dup)); sys.exit(1)
+          PY
+
+      - name: Assemble site (only the files the app needs are published)
+        run: |
+          mkdir _site
+          cp index.html app.js theme-init.js styles.css sw.js manifest.webmanifest _site/
+          cp -r icons fonts _site/
+
+      - uses: actions/configure-pages@983d7736d9b0ae728b81ab479565c72886d7745b # v5
+
+      - uses: actions/upload-pages-artifact@56afc609e74202658d3ffba0e8f6dda462b719fa # v3
+        with:
+          path: _site
+
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    permissions:
+      pages: write
+      id-token: write
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - id: deployment
+        uses: actions/deploy-pages@d6db90164ac5ed86f2b6aed7e0febac5b3c0c03e # v4

@@ -1,0 +1,17 @@
+# Personal data exports — never commit these (they contain your training log)
+*backup*.json
+sub2h-training-report.html
+*.ics
+
+# Secrets — this project has none and needs none. Keep it that way.
+.env
+.env.*
+*.pem
+*.key
+
+# OS / editor noise
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
+node_modules/

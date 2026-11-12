@@ -1,0 +1,7 @@
+# Keeps the pinned GitHub Action SHAs up to date (this project has no npm/pip dependencies).
+version: 2
+updates:
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: weekly
